@@ -16,48 +16,60 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# usage: ./downloadAmazonReviews.pl <domain> <list of IDs of amazon products>
-# example: ./downloadAmazonReviews.pl com B0040JHVC2 B004CG4CN4
-# output: a directory ./amazonreviews/<domain>/<ID> is created for each product ID; HTML files containing reviews are downloaded and saved in each directory.
-
 use strict;
 use LWP::UserAgent; 
 use HTTP::Request;
+use File::Path;
 
-$| = 1; #autoflush
+my ($thread_id, $amazon_id, $f_page, $l_page, $domain, $temp_dir) = @ARGV;
+
+chomp ($thread_id);
+chomp ($amazon_id);
+chomp ($f_page);
+chomp ($l_page);
+chomp ($domain);
+chomp ($temp_dir);
+
+if (length $f_page == 0) {
+  $f_page = 1;
+}
+if (length $l_page == 0) {
+  $l_page = 1;
+}
+if (length $domain == 0) {
+  $domain = "com";
+}
+
+print "\nAmazon ID = $amazon_id, First Page = $f_page, Last Page = $l_page, domain = $domain\n";
 
 my $ua = LWP::UserAgent->new;
 $ua->timeout(10);
 $ua->env_proxy;
-$ua->agent('Mozilla/5.0 (X11; Linux i686) AppleWebKit/534.30 (KHTML, like Gecko) Ubuntu/11.04 Chromium/12.0.742.91 Chrome/12.0.742.91 Safari/534.30');
+#$ua->agent('Mozilla/5.0 (X11; Linux i686) AppleWebKit/534.30 (KHTML, like Gecko) Ubuntu/11.04 Chromium/12.0.742.91 Chrome/12.0.742.91 Safari/534.30');
 
-mkdir "amazonreviews";
+mkdir "$temp_dir";
+mkdir "$temp_dir/$domain";
 
-my $sleepTime = 1;
+my $count = 0;
 
-my $domain = shift;
-mkdir "amazonreviews/$domain";
+if ($amazon_id) {
 
-my $id = "";
-while($id  = shift) {
-
-    my $dir = "amazonreviews/$domain/$id";
+    my $dir = "$temp_dir/$domain/$amazon_id";
     mkdir $dir;
 
     my $urlPart1 = "http://www.amazon.".$domain."/product-reviews/";
     my $urlPart2 = "/?ie=UTF8&showViewpoints=0&pageNumber=";
     my $urlPart3 = "&sortBy=bySubmissionDateDescending";
 
-    my $referer = $urlPart1.$id.$urlPart2."1".$urlPart3;
+    my $referer = $urlPart1.$amazon_id.$urlPart2."1".$urlPart3;
 
-    my $page = 1;
-	my $lastPage = 1;
+    my $page = $f_page;
+    my $lastPage = $l_page;
+    my $sleepTime = 2;
     while($page<=$lastPage) {
 
-		my $url = $urlPart1.$id.$urlPart2.$page.$urlPart3;
-
-		print $url;
-
+		my $url = $urlPart1.$amazon_id.$urlPart2.$page.$urlPart3;
+		###print $url;
 		my $request = HTTP::Request->new(GET => $url);
 		$request->referer($referer);
 
@@ -72,29 +84,30 @@ while($id  = shift) {
 					$lastPage = $val;
 				}
 			}
+    $lastPage = $l_page;
 			
 			if(open(CONTENTFILE, ">./$dir/$page")) {
 				binmode(CONTENTFILE, ":utf8");
 				print CONTENTFILE $content;
 				close(CONTENTFILE);
-				print "ok\t$domain\t$id\t$page\t$lastPage\n";
+				print "ok\t$domain\t$amazon_id\t$page\t$lastPage\n";
 			}
 			else {
-				print "failed\t$domain\t$id\t$page\t$lastPage\n";
+				print "failed\t$domain\t$amazon_id\t$page\t$lastPage\n";
 			}
 			
 			if($sleepTime>0) {
-				--$sleepTime;
+			#	--$sleepTime;
 			}
 		}
 		else {
 			if($response->code==503) {
 				--$page;
-				++$sleepTime;
+				#++$sleepTime;
 				print " TIMEOUT ".$response->code." retrying (new timeout $sleepTime)\n";
 			}
 			else {
-				print " Downloaded ". ($page-1). " pages for product id $id (end code:".$response->code.")\n";
+				print " Downloaded ". ($page-1). " pages for product id $amazon_id (end code:".$response->code.")\n";
 				last;
 			}
 		}
@@ -102,3 +115,4 @@ while($id  = shift) {
 		sleep($sleepTime);
     }
 }
+system("touch $temp_dir/$thread_id");
